@@ -13,10 +13,10 @@ export default function App() {
   const [apiKey, setApiKey] = useState<string>(import.meta.env.VITE_GEMINI_API_KEY || '');
 
   const handleFileSelect = async (base64: string, mimeType: string) => {
-    const keyToUse = apiKey.trim() || import.meta.env.VITE_GEMINI_API_KEY;
+    const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
     
     if (!keyToUse) {
-      setErrorMsg("請輸入您的 Google Gemini API 金鑰以繼續。");
+      setErrorMsg("請設定 VITE_GEMINI_API_KEY 環境變數或輸入 API 金鑰。");
       setStatus(AppStatus.ERROR);
       return;
     }
@@ -88,7 +88,7 @@ export default function App() {
             </div> */}
 
             {/* File Upload */}
-            <div className={`w-full transition-opacity duration-300 ${!apiKey ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+            <div className="w-full transition-opacity duration-300">
                <FileUpload onFileSelect={handleFileSelect} />
             </div>
           </div>
