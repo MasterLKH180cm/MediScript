@@ -20,7 +20,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
 
   const processFile = (file: File) => {
     if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file (JPEG, PNG, WEBP).');
+      alert('請上傳有效的圖片檔案（JPEG、PNG、WEBP）。');
       return;
     }
 
@@ -82,20 +82,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
             <Upload className={`w-8 h-8 ${isDragging ? 'text-medical-300' : 'text-medical-500'}`} />
           </div>
           <h3 className="text-xl font-semibold text-slate-200 mb-2">
-            Upload Medical Document
+            上傳醫療文件
           </h3>
           <p className="text-slate-400 text-sm max-w-xs mb-6">
-            Drag & drop or click to scan prescription, report, or diagnosis
+            拖放或點擊以掃描處方、報告或診斷
           </p>
           
           <div className="flex items-center gap-4 text-xs text-slate-500 uppercase tracking-wider font-medium">
             <span className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700">
               <FileImage className="w-3.5 h-3.5" />
-              Upload File
+              上傳檔案
             </span>
             <span className="flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-md border border-slate-700">
               <Camera className="w-3.5 h-3.5" />
-              Use Camera
+              使用相機
             </span>
           </div>
         </div>
