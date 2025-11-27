@@ -11,8 +11,10 @@ export default function App() {
   const [extractedData, setExtractedData] = useState<ExtractedMedicalData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string>(import.meta.env.VITE_GEMINI_API_KEY || '');
+  const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ base64: string; mimeType: string }>>([]);
 
-  const handleFileSelect = async (base64: string, mimeType: string) => {
+  const handleFileSelect = async (files: Array<{ base64: string; mimeType: string }>) => {
     const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
     
     if (!keyToUse) {
@@ -21,12 +23,71 @@ export default function App() {
       return;
     }
 
+    if (files.length === 0) {
+      setErrorMsg("未選擇任何檔案。");
+      setStatus(AppStatus.ERROR);
+      return;
+    }
+
+    setUploadedFiles(files);
+    setCurrentFileIndex(0);
     setStatus(AppStatus.PROCESSING);
     setErrorMsg(null);
     setExtractedData(null);
 
     try {
-      const data = await extractMedicalData(base64, mimeType, keyToUse);
+      // Process the first file
+      const data = await extractMedicalData(files[0].base64, files[0].mimeType, keyToUse);
+      setExtractedData(data);
+      setStatus(AppStatus.COMPLETE);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "分析過程中發生意外錯誤。");
+      setStatus(AppStatus.ERROR);
+    }
+  };
+
+  const handleNextFile = async () => {
+    if (currentFileIndex >= uploadedFiles.length - 1) return;
+
+    const nextIndex = currentFileIndex + 1;
+    setCurrentFileIndex(nextIndex);
+    setStatus(AppStatus.PROCESSING);
+    setErrorMsg(null);
+
+    const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
+
+    try {
+      const data = await extractMedicalData(
+        uploadedFiles[nextIndex].base64,
+        uploadedFiles[nextIndex].mimeType,
+        keyToUse
+      );
+      setExtractedData(data);
+      setStatus(AppStatus.COMPLETE);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(err.message || "分析過程中發生意外錯誤。");
+      setStatus(AppStatus.ERROR);
+    }
+  };
+
+  const handlePreviousFile = async () => {
+    if (currentFileIndex <= 0) return;
+
+    const prevIndex = currentFileIndex - 1;
+    setCurrentFileIndex(prevIndex);
+    setStatus(AppStatus.PROCESSING);
+    setErrorMsg(null);
+
+    const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
+
+    try {
+      const data = await extractMedicalData(
+        uploadedFiles[prevIndex].base64,
+        uploadedFiles[prevIndex].mimeType,
+        keyToUse
+      );
       setExtractedData(data);
       setStatus(AppStatus.COMPLETE);
     } catch (err: any) {
@@ -40,6 +101,8 @@ export default function App() {
     setStatus(AppStatus.IDLE);
     setExtractedData(null);
     setErrorMsg(null);
+    setUploadedFiles([]);
+    setCurrentFileIndex(0);
   };
 
   return (
@@ -106,9 +169,16 @@ export default function App() {
                 </p>
               )}
               {status === AppStatus.COMPLETE && (
-                <p className="text-sm text-slate-400">
-                  檔案處理成功！請檢視下方提取的資料和 AI 生成的提示詞。
-                </p>
+                <>
+                  <p className="text-sm text-slate-400">
+                    檔案處理成功！請檢視下方提取的資料和 AI 生成的提示詞。
+                  </p>
+                  {uploadedFiles.length > 1 && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      檔案 {currentFileIndex + 1} / {uploadedFiles.length}
+                    </p>
+                  )}
+                </>
               )}
             </div>
 
@@ -131,18 +201,27 @@ export default function App() {
               )}
             </div>
 
-            {/* Retry & Reset Button */}
+            {/* Navigation & Reset Buttons */}
             <div className="w-full max-w-xl flex flex-col md:flex-row items-center gap-4">
               
-              {/* Retry Button (Visible when ERROR) */}
-              {status === AppStatus.ERROR && (
-                <button
-                  onClick={() => handleFileSelect(extractedData!.fileB64, extractedData!.mimeType)}
-                  className="w-full md:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-medical-500 hover:bg-medical-600 transition-all text-slate-50 font-semibold shadow-md"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                  重試分析
-                </button>
+              {/* Previous/Next File Navigation (Visible when COMPLETE and multiple files) */}
+              {status === AppStatus.COMPLETE && uploadedFiles.length > 1 && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePreviousFile}
+                    disabled={currentFileIndex === 0}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-50 font-semibold shadow-md"
+                  >
+                    ← 上一個
+                  </button>
+                  <button
+                    onClick={handleNextFile}
+                    disabled={currentFileIndex >= uploadedFiles.length - 1}
+                    className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-50 font-semibold shadow-md"
+                  >
+                    下一個 →
+                  </button>
+                </div>
               )}
 
               {/* Reset Button (Visible when COMPLETE) */}

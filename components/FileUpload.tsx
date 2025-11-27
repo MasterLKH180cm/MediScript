@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { Upload, FileImage, Camera } from 'lucide-react';
 
 interface FileUploadProps {
-  onFileSelect: (base64: string, mimeType: string) => void;
+  onFileSelect: (files: Array<{ base64: string; mimeType: string }>) => void;
   disabled?: boolean;
 }
 
@@ -10,28 +10,41 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
   const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      processFile(file);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      processFiles(Array.from(files));
     }
     // Reset value so same file can be selected again if needed
     event.target.value = '';
   }, [onFileSelect]);
 
-  const processFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
+  const processFiles = async (files: File[]) => {
+    const validFiles = files.filter(file => file.type.startsWith('image/'));
+    
+    if (validFiles.length === 0) {
       alert('請上傳有效的圖片檔案（JPEG、PNG、WEBP）。');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      // Remove data URL prefix (e.g., "data:image/jpeg;base64,")
-      const base64 = result.split(',')[1];
-      onFileSelect(base64, file.type);
-    };
-    reader.readAsDataURL(file);
+    if (validFiles.length < files.length) {
+      alert(`已跳過 ${files.length - validFiles.length} 個非圖片檔案。`);
+    }
+
+    const processedFiles = await Promise.all(
+      validFiles.map(file => 
+        new Promise<{ base64: string; mimeType: string }>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const base64 = result.split(',')[1];
+            resolve({ base64, mimeType: file.type });
+          };
+          reader.readAsDataURL(file);
+        })
+      )
+    );
+
+    onFileSelect(processedFiles);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -49,9 +62,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
     setIsDragging(false);
     if (disabled) return;
     
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      processFile(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      processFiles(Array.from(files));
     }
   };
 
@@ -72,6 +85,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
         <input
           type="file"
           accept="image/*"
+          multiple
           onChange={handleFileChange}
           disabled={disabled}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
@@ -85,7 +99,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
             上傳醫療文件
           </h3>
           <p className="text-slate-400 text-sm max-w-xs mb-6">
-            拖放或點擊以掃描處方、報告或診斷
+            拖放或點擊以掃描處方、報告或診斷（支援多個檔案）
           </p>
           
           <div className="flex items-center gap-4 text-xs text-slate-500 uppercase tracking-wider font-medium">
