@@ -1,5 +1,5 @@
 {
-  "name": "mediscript-ocr-&-prompt-gen",
+  "name": "mediscript-ocr-prompt-gen",
   "private": true,
   "version": "0.0.0",
   "type": "module",
