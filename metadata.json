@@ -1,0 +1,7 @@
+{
+  "name": "MediScript OCR & Prompt Gen",
+  "description": "A professional medical tool that extracts text from medical documents using AI vision and generates structured prompts for caregiver assistance.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
