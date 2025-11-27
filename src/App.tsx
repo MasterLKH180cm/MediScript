@@ -89,7 +89,7 @@ export default function App() {
 
             {/* File Upload */}
             <div className={`w-full transition-opacity duration-300 ${!apiKey ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-               <FileUpload onFileSelect={handleFileSelect} disabled={!apiKey} />
+               <FileUpload onFileSelect={handleFileSelect} />
             </div>
           </div>
         )}
