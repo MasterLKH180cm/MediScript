@@ -9,7 +9,44 @@ interface PromptGeneratorProps {
 export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ extractedData }) => {
   const [copied, setCopied] = useState(false);
 
-  // Construct the prompt string with comprehensive details
+  // Helper function to format values for the prompt
+  const formatValue = (value: any, indent: string = '  ', depth: number = 0): string => {
+    if (value === null || value === undefined || value === '') {
+      return '未提供';
+    }
+
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '無';
+      return '\n' + value.map((item, i) => {
+        if (typeof item === 'object' && item !== null) {
+          const nested = formatValue(item, indent + '  ', depth + 1);
+          return `${indent}${i + 1}. ${nested}`;
+        }
+        return `${indent}${i + 1}. ${item}`;
+      }).join('\n');
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      return '\n' + Object.entries(value)
+        .map(([key, val]) => {
+          const formattedKey = key.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim();
+          const formattedValue = formatValue(val, indent + '  ', depth + 1);
+          if (formattedValue.startsWith('\n')) {
+            return `${indent}• ${formattedKey}:${formattedValue}`;
+          }
+          return `${indent}• ${formattedKey}: ${formattedValue}`;
+        })
+        .join('\n');
+    }
+
+    if (typeof value === 'boolean') {
+      return value ? '是' : '否';
+    }
+
+    return String(value);
+  };
+
+  // Construct the prompt string with ALL extracted data
   const generatePromptText = () => {
     const sections: string[] = [];
 
@@ -30,133 +67,81 @@ export const PromptGenerator: React.FC<PromptGeneratorProps> = ({ extractedData 
     sections.push(`🎯 任務目標：`);
     sections.push(`基於以下提取的醫療資訊，生成全面的照護指導方案，確保患者安全、提升照護品質，並賦能照護者執行有效的居家照護。\n`);
 
-    // Extracted Medical Data
-    sections.push(`📊 提取的醫療資訊：`);
+    // Extracted Medical Data - Include ALL fields dynamically
+    sections.push(`📊 提取的醫療資訊（完整）：`);
     sections.push(`${'─'.repeat(60)}`);
 
-    // Patient Demographics
-    if (extractedData.patientName || extractedData.age || extractedData.sex) {
-      sections.push(`\n👤 患者基本資料：`);
-      if (extractedData.patientName) sections.push(`  • 姓名：${extractedData.patientName}`);
-      if (extractedData.age) sections.push(`  • 年齡：${extractedData.age}`);
-      if (extractedData.sex) sections.push(`  • 性別：${extractedData.sex}`);
-      if (extractedData.patientId) sections.push(`  • 病歷號：${extractedData.patientId}`);
-    }
+    // Define field categories for organized output
+    const fieldCategories = {
+      '👤 患者基本資料': ['patientName', 'age', 'sex', 'patientId', 'dateOfBirth', 'contactInfo', 'address', 'emergencyContact', 'insuranceInfo'],
+      '📄 文件資訊': ['reportType', 'reportDate', 'documentId', 'institution', 'institutionAddress', 'department', 'doctorName', 'doctorId', 'urgencyLevel'],
+      '🔍 診斷資訊': ['diagnosis', 'primaryDiagnosis', 'secondaryDiagnoses', 'icdCode', 'diseaseStage', 'diseaseGrade', 'severity', 'metastasisSites', 'progression', 'differentialDiagnosis'],
+      '💊 用藥資訊': ['medications', 'prescription', 'medicationSchedule', 'dosages', 'medicationRoute', 'medicationDuration', 'medicationNotes'],
+      '🧪 檢驗與檢查': ['labResults', 'labTests', 'imagingFindings', 'pathologyReport', 'biopsyResults', 'diagnosticTests', 'testResults'],
+      '💓 生命徵象': ['vitalSigns', 'bloodPressure', 'heartRate', 'temperature', 'respiratoryRate', 'oxygenSaturation', 'weight', 'height', 'bmi'],
+      '🏥 醫療處置': ['procedures', 'surgeries', 'interventions', 'treatments', 'therapies', 'radiotherapy', 'chemotherapy'],
+      '📋 病史與背景': ['medicalHistory', 'pastIllnesses', 'pastSurgeries', 'familyHistory', 'socialHistory', 'occupationalHistory', 'travelHistory'],
+      '⚠️ 過敏與不良反應': ['allergies', 'adverseReactions', 'drugIntolerances', 'contraindications'],
+      '📝 治療計劃': ['treatmentPlan', 'treatmentGoals', 'expectedOutcomes', 'treatmentTimeline', 'monitoringPlan'],
+      '📅 追蹤與回診': ['followUp', 'followUpDate', 'followUpInstructions', 'nextAppointment', 'reviewDate'],
+      '🚫 限制與注意事項': ['restrictions', 'precautions', 'warnings', 'activityRestrictions', 'dietaryRestrictions'],
+      '👨‍⚕️ 醫療人員記錄': ['doctorNotes', 'clinicalNotes', 'nurseNotes', 'consultationNotes', 'progressNotes', 'recommendations'],
+      '🔮 預後與預期': ['prognosis', 'expectedRecovery', 'complications', 'riskFactors', 'preventiveMeasures']
+    };
 
-    // Document Information
-    if (extractedData.reportDate || extractedData.reportType || extractedData.institution) {
-      sections.push(`\n📄 文件資訊：`);
-      if (extractedData.reportType) sections.push(`  • 報告類型：${extractedData.reportType}`);
-      if (extractedData.reportDate) sections.push(`  • 報告日期：${extractedData.reportDate}`);
-      if (extractedData.institution) sections.push(`  • 醫療機構：${extractedData.institution}`);
-      if (extractedData.department) sections.push(`  • 科別：${extractedData.department}`);
-      if (extractedData.doctorName) sections.push(`  • 主治醫師：${extractedData.doctorName}`);
-    }
-
-    // Primary Diagnosis
-    if (extractedData.diagnosis) {
-      sections.push(`\n🔍 主要診斷：`);
-      sections.push(`  ${extractedData.diagnosis}`);
-      if (extractedData.icdCode) sections.push(`  • ICD代碼：${extractedData.icdCode}`);
-      if (extractedData.diseaseStage) sections.push(`  • 疾病分期：${extractedData.diseaseStage}`);
-      if (extractedData.severity) sections.push(`  • 嚴重程度：${extractedData.severity}`);
-    }
-
-    // Secondary Diagnoses
-    if (extractedData.secondaryDiagnoses && extractedData.secondaryDiagnoses.length > 0) {
-      sections.push(`\n📌 次要診斷/併發症：`);
-      extractedData.secondaryDiagnoses.forEach((dx, i) => {
-        sections.push(`  ${i + 1}. ${dx}`);
+    // Iterate through all categories and extract available data
+    Object.entries(fieldCategories).forEach(([category, fields]) => {
+      const categoryData: string[] = [];
+      
+      fields.forEach(field => {
+        const value = (extractedData as any)[field];
+        if (value !== null && value !== undefined && value !== '' && 
+            (!Array.isArray(value) || value.length > 0) &&
+            (typeof value !== 'object' || Object.keys(value).length > 0)) {
+          
+          const formattedKey = field.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+          const capitalizedKey = formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1);
+          const formattedValue = formatValue(value, '    ', 0);
+          
+          if (formattedValue.startsWith('\n')) {
+            categoryData.push(`  • ${capitalizedKey}:${formattedValue}`);
+          } else {
+            categoryData.push(`  • ${capitalizedKey}: ${formattedValue}`);
+          }
+        }
       });
-    }
 
-    // Medications
-    if (extractedData.prescription && extractedData.prescription.length > 0) {
-      sections.push(`\n💊 處方藥物：`);
-      extractedData.prescription.forEach((med, i) => {
-        sections.push(`  ${i + 1}. ${med}`);
-      });
-    }
-
-    if (extractedData.medications && extractedData.medications.length > 0) {
-      sections.push(`\n💊 用藥詳情：`);
-      extractedData.medications.forEach((med: any, i: number) => {
-        sections.push(`  ${i + 1}. ${typeof med === 'string' ? med : JSON.stringify(med)}`);
-      });
-    }
-
-    // Lab Results & Vital Signs
-    if (extractedData.labResults && extractedData.labResults.length > 0) {
-      sections.push(`\n🧪 檢驗結果與生命徵象：`);
-      extractedData.labResults.forEach((result, i) => {
-        sections.push(`  • ${result}`);
-      });
-    }
-
-    if (extractedData.vitalSigns) {
-      sections.push(`\n💓 生命徵象：`);
-      if (typeof extractedData.vitalSigns === 'object') {
-        Object.entries(extractedData.vitalSigns).forEach(([key, value]) => {
-          sections.push(`  • ${key}: ${value}`);
-        });
-      } else {
-        sections.push(`  ${extractedData.vitalSigns}`);
+      if (categoryData.length > 0) {
+        sections.push(`\n${category}:`);
+        sections.push(...categoryData);
       }
-    }
+    });
 
-    // Medical Procedures
-    if (extractedData.procedures && extractedData.procedures.length > 0) {
-      sections.push(`\n🏥 醫療處置/手術：`);
-      extractedData.procedures.forEach((proc, i) => {
-        sections.push(`  ${i + 1}. ${proc}`);
-      });
-    }
+    // Include any remaining fields not in predefined categories
+    const allPredefinedFields = Object.values(fieldCategories).flat();
+    const remainingFields = Object.keys(extractedData).filter(
+      key => !allPredefinedFields.includes(key) && 
+             !['fileB64', 'mimeType'].includes(key)
+    );
 
-    // Medical History
-    if (extractedData.medicalHistory && extractedData.medicalHistory.length > 0) {
-      sections.push(`\n📋 病史記錄：`);
-      extractedData.medicalHistory.forEach((history, i) => {
-        sections.push(`  • ${history}`);
-      });
-    }
-
-    // Allergies
-    if (extractedData.allergies && extractedData.allergies.length > 0) {
-      sections.push(`\n⚠️ 過敏史：`);
-      extractedData.allergies.forEach((allergy, i) => {
-        sections.push(`  • ${allergy}`);
-      });
-    }
-
-    // Treatment Plan
-    if (extractedData.treatmentPlan) {
-      sections.push(`\n📝 治療計劃：`);
-      sections.push(`  ${extractedData.treatmentPlan}`);
-    }
-
-    // Follow-up
-    if (extractedData.followUp) {
-      sections.push(`\n📅 追蹤安排：`);
-      sections.push(`  ${extractedData.followUp}`);
-    }
-
-    // Doctor's Notes
-    if (extractedData.doctorNotes) {
-      sections.push(`\n👨‍⚕️ 醫師備註：`);
-      sections.push(`  ${extractedData.doctorNotes}`);
-    }
-
-    // Clinical Notes
-    if (extractedData.clinicalNotes) {
-      sections.push(`\n📝 臨床記錄：`);
-      sections.push(`  ${extractedData.clinicalNotes}`);
-    }
-
-    // Restrictions & Precautions
-    if (extractedData.restrictions && extractedData.restrictions.length > 0) {
-      sections.push(`\n🚫 限制事項：`);
-      extractedData.restrictions.forEach((restriction, i) => {
-        sections.push(`  • ${restriction}`);
+    if (remainingFields.length > 0) {
+      sections.push(`\n📌 其他醫療資訊：`);
+      remainingFields.forEach(field => {
+        const value = (extractedData as any)[field];
+        if (value !== null && value !== undefined && value !== '' &&
+            (!Array.isArray(value) || value.length > 0) &&
+            (typeof value !== 'object' || Object.keys(value).length > 0)) {
+          
+          const formattedKey = field.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim();
+          const capitalizedKey = formattedKey.charAt(0).toUpperCase() + formattedKey.slice(1);
+          const formattedValue = formatValue(value, '    ', 0);
+          
+          if (formattedValue.startsWith('\n')) {
+            sections.push(`  • ${capitalizedKey}:${formattedValue}`);
+          } else {
+            sections.push(`  • ${capitalizedKey}: ${formattedValue}`);
+          }
+        }
       });
     }
 
