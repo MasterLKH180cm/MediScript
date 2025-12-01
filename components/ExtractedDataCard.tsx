@@ -1,114 +1,135 @@
 import React from 'react';
 import { ExtractedMedicalData } from '../types';
-import { Activity, Pill, FileText, User, ClipboardList, TestTube } from 'lucide-react';
 
 interface ExtractedDataCardProps {
   data: ExtractedMedicalData;
 }
 
 export const ExtractedDataCard: React.FC<ExtractedDataCardProps> = ({ data }) => {
-  const hasData = (arr?: string[]) => arr && arr.length > 0;
+  const renderValue = (value: any, depth: number = 0): React.ReactNode => {
+    // Handle null/undefined/empty
+    if (value === null || value === undefined || value === '') {
+      return <span className="text-slate-500 italic">未提供</span>;
+    }
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return <span className="text-slate-500 italic">無資料</span>;
+      }
+      return (
+        <ul className="list-disc list-inside space-y-1 ml-2">
+          {value.map((item, index) => (
+            <li key={index} className="text-slate-300">
+              {renderValue(item, depth + 1)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    // Handle objects
+    if (typeof value === 'object' && value !== null) {
+      const entries = Object.entries(value);
+      if (entries.length === 0) {
+        return <span className="text-slate-500 italic">無資料</span>;
+      }
+
+      // Render as inline text for simple objects with few properties
+      if (entries.length <= 3 && depth > 0) {
+        const formatted = entries
+          .map(([k, v]) => {
+            const formattedKey = formatKey(k);
+            const formattedValue = typeof v === 'object' ? JSON.stringify(v) : String(v);
+            return `${formattedKey}: ${formattedValue}`;
+          })
+          .join('; ');
+        return <span className="text-slate-200">{formatted}</span>;
+      }
+
+      // Render as structured nested view for complex objects
+      return (
+        <div className={`${depth > 0 ? 'pl-4 border-l-2 border-slate-700' : ''} space-y-2 mt-1`}>
+          {entries.map(([nestedKey, nestedValue]) => (
+            <div key={nestedKey} className="text-sm">
+              <span className="text-slate-400 font-medium">
+                {formatKey(nestedKey)}:
+              </span>
+              <div className="ml-2 mt-0.5">
+                {renderValue(nestedValue, depth + 1)}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // Handle booleans
+    if (typeof value === 'boolean') {
+      return (
+        <span className={value ? 'text-green-400' : 'text-red-400'}>
+          {value ? '是' : '否'}
+        </span>
+      );
+    }
+
+    // Handle numbers and strings
+    const stringValue = String(value);
+    
+    // Check if it's a long text block
+    if (stringValue.length > 100) {
+      return (
+        <div className="text-slate-200 whitespace-pre-wrap break-words">
+          {stringValue}
+        </div>
+      );
+    }
+
+    return <span className="text-slate-200">{stringValue}</span>;
+  };
+
+  const formatKey = (key: string): string => {
+    // Convert snake_case and camelCase to Title Case
+    return key
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
+  // Filter out internal fields
+  const dataEntries = Object.entries(data).filter(
+    ([key]) => !['fileB64', 'mimeType'].includes(key)
+  );
+
+  if (dataEntries.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-slate-400 italic">未提取到任何醫療資訊</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl w-full text-slate-100">
-      <div className="flex items-center gap-2 mb-4 border-b border-slate-800 pb-3">
-        <Activity className="text-medical-400 w-5 h-5" />
-        <h3 className="text-lg font-semibold">掃描詳情</h3>
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold text-slate-50 border-b border-slate-700 pb-2">
+        提取的醫療資訊
+      </h3>
+      
+      <div className="space-y-3">
+        {dataEntries.map(([key, value]) => (
+          <div key={key} className="bg-slate-900/50 rounded-lg p-4 hover:bg-slate-900/70 transition-colors">
+            <h4 className="text-sm font-semibold text-medical-400 mb-2">
+              {formatKey(key)}
+            </h4>
+            <div className="text-sm">
+              {renderValue(value, 0)}
+            </div>
+          </div>
+        ))}
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
-        
-        {/* Patient & Diagnosis */}
-        <div className="space-y-4">
-          <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-            <div className="flex items-center gap-2 text-medical-300 mb-2">
-              <User className="w-3 h-3" />
-              <span className="text-xs uppercase font-bold tracking-wider">患者資訊</span>
-            </div>
-            <div className="space-y-1">
-              <p className="text-slate-300 font-medium text-base">{data.patientName || "未偵測到"}</p>
-              <div className="flex items-center gap-4 text-xs text-slate-500">
-                <div className="flex items-center gap-1">
-                  <span>年齡：</span>
-                  <span className="text-slate-300 font-medium">{data.age || "無資料"}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span>性別：</span>
-                  <span className="text-slate-300 font-medium">{data.sex || "無資料"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-             <div className="flex items-center gap-2 text-medical-300 mb-1">
-              <ClipboardList className="w-3 h-3" />
-              <span className="text-xs uppercase font-bold tracking-wider">診斷</span>
-            </div>
-            <p className="text-slate-300 font-medium">{data.diagnosis || "未偵測到"}</p>
-          </div>
-        </div>
-
-        {/* Prescription */}
-        <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800/50 h-full">
-          <div className="flex items-center gap-2 text-medical-300 mb-2">
-            <Pill className="w-3 h-3" />
-            <span className="text-xs uppercase font-bold tracking-wider">處方 / 藥物</span>
-          </div>
-          {hasData(data.prescription) ? (
-            <ul className="list-disc list-inside space-y-1 text-slate-300">
-              {data.prescription!.map((item, idx) => (
-                <li key={idx} className="marker:text-medical-600 leading-relaxed">{item}</li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-slate-500 italic">未偵測到藥物</p>
-          )}
-        </div>
-      </div>
-
-      {/* Lab Results */}
-      {hasData(data.labResults) && (
-        <div className="mt-4 bg-slate-950/50 p-3 rounded-lg border border-slate-800/50">
-          <div className="flex items-center gap-2 text-medical-300 mb-2">
-            <TestTube className="w-3 h-3" />
-            <span className="text-xs uppercase font-bold tracking-wider">檢驗結果與生命徵象</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {data.labResults!.map((result, idx) => (
-              <div key={idx} className="bg-slate-900 px-3 py-1.5 rounded border border-slate-800 text-xs text-slate-300 font-mono">
-                {result}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Procedures / Notes */}
-      {(hasData(data.procedures) || data.doctorNotes) && (
-        <div className="mt-4 pt-4 border-t border-slate-800">
-           <div className="flex items-center gap-2 text-medical-300 mb-2">
-            <FileText className="w-3 h-3" />
-            <span className="text-xs uppercase font-bold tracking-wider">附加備註與醫療程序</span>
-          </div>
-          <div className="space-y-3 text-slate-300">
-            {hasData(data.procedures) && (
-               <div className="flex flex-col gap-1">
-                  <span className="text-slate-500 text-xs font-semibold">醫療程序：</span>
-                  <div className="pl-2 border-l-2 border-slate-700">
-                    {data.procedures!.join("、")}
-                  </div>
-               </div>
-            )}
-            {data.doctorNotes && (
-               <div className="bg-medical-900/10 p-3 rounded border border-medical-900/20">
-                  <span className="text-medical-500 text-xs font-bold block mb-1">醫生備註：</span>
-                  <p className="italic leading-relaxed">{data.doctorNotes}</p>
-               </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { FileUpload } from '../components/FileUpload';
 import { ExtractedDataCard } from '../components/ExtractedDataCard';
 import { PromptGenerator } from '../components/PromptGenerator';
@@ -8,22 +8,25 @@ import { Stethoscope, Loader2, AlertCircle, RefreshCw, Key } from 'lucide-react'
 
 export default function App() {
   const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-  const [extractedData, setExtractedData] = useState<ExtractedMedicalData | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string>(import.meta.env.VITE_GEMINI_API_KEY || '');
   const [currentFileIndex, setCurrentFileIndex] = useState<number>(0);
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ base64: string; mimeType: string }>>([]);
+  const [extractedResults, setExtractedResults] = useState<ExtractedMedicalData[]>([]);
+  const currentExtractedData = extractedResults[currentFileIndex] ?? null;
+  const aggregatedData = useMemo(
+    () => aggregateExtractedData(extractedResults),
+    [extractedResults]
+  );
 
   const handleFileSelect = async (files: Array<{ base64: string; mimeType: string }>) => {
     const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
-    
     if (!keyToUse) {
       setErrorMsg("請設定 VITE_GEMINI_API_KEY 環境變數或輸入 API 金鑰。");
       setStatus(AppStatus.ERROR);
       return;
     }
-
-    if (files.length === 0) {
+    if (!files.length) {
       setErrorMsg("未選擇任何檔案。");
       setStatus(AppStatus.ERROR);
       return;
@@ -33,75 +36,41 @@ export default function App() {
     setCurrentFileIndex(0);
     setStatus(AppStatus.PROCESSING);
     setErrorMsg(null);
-    setExtractedData(null);
+    setExtractedResults([]);
 
+    const results: ExtractedMedicalData[] = [];
     try {
-      // Process the first file
-      const data = await extractMedicalData(files[0].base64, files[0].mimeType, keyToUse);
-      setExtractedData(data);
+      for (const file of files) {
+        const data = await extractMedicalData(file.base64, file.mimeType, keyToUse);
+        results.push({
+          ...data,
+          fileB64: data.fileB64 ?? file.base64,
+          mimeType: data.mimeType ?? file.mimeType,
+        });
+      }
+      setExtractedResults(results);
       setStatus(AppStatus.COMPLETE);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(err.message || "分析過程中發生意外錯誤。");
+      setExtractedResults(results);
+      setErrorMsg(err?.message || "分析過程中發生意外錯誤。");
       setStatus(AppStatus.ERROR);
     }
   };
 
-  const handleNextFile = async () => {
-    if (currentFileIndex >= uploadedFiles.length - 1) return;
-
-    const nextIndex = currentFileIndex + 1;
-    setCurrentFileIndex(nextIndex);
-    setStatus(AppStatus.PROCESSING);
-    setErrorMsg(null);
-
-    const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
-
-    try {
-      const data = await extractMedicalData(
-        uploadedFiles[nextIndex].base64,
-        uploadedFiles[nextIndex].mimeType,
-        keyToUse
-      );
-      setExtractedData(data);
-      setStatus(AppStatus.COMPLETE);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || "分析過程中發生意外錯誤。");
-      setStatus(AppStatus.ERROR);
-    }
+  const handleNextFile = () => {
+    setCurrentFileIndex((prev) => Math.min(prev + 1, extractedResults.length - 1));
   };
 
-  const handlePreviousFile = async () => {
-    if (currentFileIndex <= 0) return;
-
-    const prevIndex = currentFileIndex - 1;
-    setCurrentFileIndex(prevIndex);
-    setStatus(AppStatus.PROCESSING);
-    setErrorMsg(null);
-
-    const keyToUse = import.meta.env.VITE_GEMINI_API_KEY || apiKey.trim();
-
-    try {
-      const data = await extractMedicalData(
-        uploadedFiles[prevIndex].base64,
-        uploadedFiles[prevIndex].mimeType,
-        keyToUse
-      );
-      setExtractedData(data);
-      setStatus(AppStatus.COMPLETE);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(err.message || "分析過程中發生意外錯誤。");
-      setStatus(AppStatus.ERROR);
-    }
+  const handlePreviousFile = () => {
+    setCurrentFileIndex((prev) => Math.max(prev - 1, 0));
   };
 
   const handleReset = () => {
     setStatus(AppStatus.IDLE);
-    setExtractedData(null);
     setErrorMsg(null);
     setUploadedFiles([]);
+    setExtractedResults([]);
     setCurrentFileIndex(0);
   };
 
@@ -152,7 +121,7 @@ export default function App() {
 
             {/* File Upload */}
             <div className="w-full transition-opacity duration-300">
-               <FileUpload onFileSelect={handleFileSelect} />
+               <FileUpload onFileSelect={handleFileSelect} disabled={status === AppStatus.PROCESSING} />
             </div>
           </div>
         )}
@@ -173,9 +142,9 @@ export default function App() {
                   <p className="text-sm text-slate-400">
                     檔案處理成功！請檢視下方提取的資料和 AI 生成的提示詞。
                   </p>
-                  {uploadedFiles.length > 1 && (
+                  {extractedResults.length > 1 && (
                     <p className="text-xs text-slate-500 mt-2">
-                      檔案 {currentFileIndex + 1} / {uploadedFiles.length}
+                      檔案 {currentFileIndex + 1} / {extractedResults.length}
                     </p>
                   )}
                 </>
@@ -185,18 +154,30 @@ export default function App() {
             {/* Extracted Data & Prompts Display */}
             <div className="w-full max-w-3xl bg-slate-800 rounded-lg p-6 shadow-md space-y-4">
               
+              {/* Debug: Show raw extracted data */}
+              {currentExtractedData && (
+                <details className="mb-4">
+                  <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-300">
+                    顯示原始提取資料（除錯用）
+                  </summary>
+                  <pre className="mt-2 p-3 bg-slate-900 rounded text-xs text-slate-300 overflow-auto max-h-60">
+                    {JSON.stringify(currentExtractedData, null, 2)}
+                  </pre>
+                </details>
+              )}
+
               {/* Extracted Data Card */}
-              {extractedData && (
-                <ExtractedDataCard data={extractedData} />
+              {currentExtractedData && (
+                <ExtractedDataCard data={currentExtractedData} />
               )}
 
               {/* AI Prompts Section (Visible when COMPLETE) */}
-              {status === AppStatus.COMPLETE && extractedData && (
+              {status === AppStatus.COMPLETE && aggregatedData && (
                 <div className="mt-4">
                   <h2 className="text-lg font-semibold text-slate-50 mb-2">
-                    AI 生成的提示詞
+                    AI 生成的提示詞（整合 {extractedResults.length} 份文件）
                   </h2>
-                  <PromptGenerator extractedData={extractedData} />
+                  <PromptGenerator extractedData={aggregatedData} />
                 </div>
               )}
             </div>
@@ -205,7 +186,7 @@ export default function App() {
             <div className="w-full max-w-xl flex flex-col md:flex-row items-center gap-4">
               
               {/* Previous/Next File Navigation (Visible when COMPLETE and multiple files) */}
-              {status === AppStatus.COMPLETE && uploadedFiles.length > 1 && (
+              {status === AppStatus.COMPLETE && extractedResults.length > 1 && (
                 <div className="flex gap-2">
                   <button
                     onClick={handlePreviousFile}
@@ -216,7 +197,7 @@ export default function App() {
                   </button>
                   <button
                     onClick={handleNextFile}
-                    disabled={currentFileIndex >= uploadedFiles.length - 1}
+                    disabled={currentFileIndex >= extractedResults.length - 1}
                     className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-slate-50 font-semibold shadow-md"
                   >
                     下一個 →
@@ -242,11 +223,20 @@ export default function App() {
 
         {/* Error Message Display */}
         {status === AppStatus.ERROR && errorMsg && (
-          <div className="w-full max-w-xl text-center">
+          <div className="w-full max-w-xl text-center space-y-3">
             <p className="text-sm text-red-500 flex items-center justify-center gap-2">
               <AlertCircle className="w-5 h-5" />
               {errorMsg}
             </p>
+            {uploadedFiles.length > 0 && (
+              <button
+                onClick={() => handleFileSelect(uploadedFiles)}
+                className="mx-auto flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-medical-500 hover:bg-medical-600 transition-all text-slate-50 font-semibold shadow-md"
+              >
+                <RefreshCw className="w-5 h-5" />
+                重新分析全部檔案
+              </button>
+            )}
           </div>
         )}
       </main>
@@ -263,3 +253,40 @@ export default function App() {
     </div>
   );
 }
+
+function aggregateExtractedData(records: ExtractedMedicalData[]): ExtractedMedicalData | null {
+  if (!records.length) return null;
+
+  return records.reduce<ExtractedMedicalData>((acc, record) => {
+    const merged = { ...acc };
+
+    (Object.keys(record) as Array<keyof ExtractedMedicalData>).forEach((key) => {
+      const currentValue = merged[key];
+      const incomingValue = record[key];
+
+      if (Array.isArray(currentValue) && Array.isArray(incomingValue)) {
+        merged[key] = [...currentValue, ...incomingValue] as ExtractedMedicalData[typeof key];
+        return;
+      }
+
+      if (isPlainObject(currentValue) && isPlainObject(incomingValue)) {
+        merged[key] = { ...currentValue, ...incomingValue } as ExtractedMedicalData[typeof key];
+        return;
+      }
+
+      if (currentValue == null && incomingValue != null) {
+        merged[key] = incomingValue;
+        return;
+      }
+
+      if (incomingValue != null) {
+        merged[key] = incomingValue;
+      }
+    });
+
+    return merged;
+  }, {} as ExtractedMedicalData);
+}
+
+const isPlainObject = (value: unknown): value is Record<string, any> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
